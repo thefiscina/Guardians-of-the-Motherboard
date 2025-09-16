@@ -3,31 +3,50 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Guardians of the Motherboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            background: #0b1020;
-            overflow: hidden;
-        }
-
-        #game {
-            position: fixed;
-            inset: 0;
-        }
-    </style>
+    <title>Guardian of the Motherboard</title>
+    <link rel="stylesheet" href="style.css">
     <!-- PixiJS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.3/pixi.min.js" crossorigin="anonymous"></script>
 </head>
 
 <body>
-    <div id="game"></div>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-content">
+            <h1>GUARDIAN OF THE MOTHERBOARD</h1>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+            <p>Carregando...</p>
+        </div>
+    </div>
 
-    <!-- Seus scripts -->
+    <!-- Game Container -->
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls" class="mobile-only">
+        <div class="dpad">
+            <button class="btn-up" data-key="w">↑</button>
+            <button class="btn-left" data-key="a">←</button>
+            <button class="btn-down" data-key="s">↓</button>
+            <button class="btn-right" data-key="d">→</button>
+        </div>
+        <div class="action-buttons">
+            <button class="btn-action" data-action="attack">MAGIA</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Verificação básica de compatibilidade
+        if (!window.requestAnimationFrame) {
+            document.body.innerHTML = '<div style="text-align:center;padding:50px;font-family:monospace;">Seu navegador não é compatível com este jogo. Tente usar uma versão mais recente do Chrome, Firefox ou Safari.</div>';
+        }
+    </script>
     <script type="module" src="src/main.js"></script>
 </body>
 
