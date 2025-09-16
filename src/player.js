@@ -6,6 +6,7 @@ export class Player {
     constructor(app, callbacks = {}) {
         this.app = app;
         this.callbacks = callbacks;
+        this.level = null; // Será definido pelo nível
 
         // Estados do jogador
         this.health = 100;
@@ -32,45 +33,86 @@ export class Player {
         this.animations = {};
         this.sprite = null;
 
+        // Sistema de idle
+        this.idleTimer = 0;
+        this.idleThreshold = 2000; // 2 segundos
+        this.isIdle = false;
+        this.isVictory = false;
+        this.lastActionTime = Date.now();
+
+        // Controle de animação de idle
+        this.idleAnimationPhase = 0; // 0: não iniciado, 1: primeira sequência, 2: loop
+        this.idleFrameIndex = 0;
+
         // Sistema de magia
         this.magicSystem = new MagicSystem(app, this);
 
         this.init();
     }
 
+    setLevel(level) {
+        this.level = level;
+    }
+
     async init() {
-        await this.loadAnimations();
-        this.setupControls();
-        this.setupSprite();
+        try {
+            await this.loadAnimations();
+            this.setupControls();
+            this.setupSprite();
 
-        // Posição inicial
-        this.sprite.x = this.app.renderer.width * 0.2;
-        this.sprite.y = this.app.renderer.height * 0.7;
+            if (this.sprite) {
+                // Posição inicial
+                this.sprite.x = this.app.renderer.width * 0.2;
+                this.sprite.y = this.app.renderer.height * 0.7;
 
-        this.app.stage.addChild(this.sprite);
+                this.app.stage.addChild(this.sprite);
+            }
+        } catch (error) {
+            console.error('Erro na inicialização do player:', error);
+        }
     }
 
     async loadAnimations() {
         try {
             const runTexture = await PIXI.Assets.load('assets/sprites/herorun.png');
 
-            // Criar diferentes animações do mesmo spritesheet
-            // Como temos apenas o herorun.png, vamos simular outras animações
-            const frames = sliceGrid(runTexture, {
+            // Carregar animação de idle/stand
+            let standTexture;
+            try {
+                standTexture = await PIXI.Assets.load('assets/sprites/hero_stand.png');
+            } catch (error) {
+                console.warn('hero_stand.png não encontrado, usando herorun como fallback');
+                standTexture = runTexture;
+            }
+
+            // Criar frames de corrida
+            const runFrames = sliceGrid(runTexture, {
                 cols: 5,
                 rows: 2,
                 margin: 0,
                 spacing: 8
             });
 
+            // Criar frames de idle/stand
+            const standFrames = sliceGrid(standTexture, {
+                cols: 4, // Assumindo 4 colunas, ajuste se necessário
+                rows: 1, // Assumindo 1 linha, ajuste se necessário
+                margin: 0,
+                spacing: 0
+            });
+
             // Distribuir frames para diferentes animações
             this.animations = {
-                idle: [frames[0]], // Primeiro frame como idle
-                run: frames.slice(0, 8), // Primeiros 8 frames para corrida
-                jump: [frames[8] || frames[0]], // Frame de pulo
-                crouch: [frames[9] || frames[0]], // Frame agachado
-                attack: frames.slice(0, 3), // Primeiros 3 frames como ataque
-                cast: frames.slice(3, 6) // Frames 3-5 como cast
+                idle: [runFrames[0]], // Primeiro frame de corrida como idle básico
+                run: runFrames.slice(0, 8), // Primeiros 8 frames para corrida
+                jump: [runFrames[8] || runFrames[0]], // Frame de pulo
+                crouch: [runFrames[9] || runFrames[0]], // Frame agachado
+                attack: runFrames.slice(0, 3), // Primeiros 3 frames como ataque
+                cast: runFrames.slice(3, 6), // Frames 3-5 como cast
+
+                // Animações de idle com hero_stand.png
+                idleStand: standFrames, // Todos os frames de hero_stand
+                victory: standFrames // Mesmos frames para vitória
             };
 
         } catch (error) {
@@ -83,12 +125,19 @@ export class Player {
                 jump: [fallbackTexture],
                 crouch: [fallbackTexture],
                 attack: [fallbackTexture],
-                cast: [fallbackTexture]
+                cast: [fallbackTexture],
+                idleStand: [fallbackTexture],
+                victory: [fallbackTexture]
             };
         }
     }
 
     setupSprite() {
+        if (!this.animations.idle || this.animations.idle.length === 0) {
+            console.error('Animações não carregadas para criar o sprite');
+            return;
+        }
+
         this.sprite = new PIXI.AnimatedSprite(this.animations.idle);
         this.sprite.anchor.set(0.5, 1.0);
         this.sprite.animationSpeed = 0.15;
@@ -143,37 +192,74 @@ export class Player {
         }
     }
 
-    handleKey(e, pressed) {
-        const key = e.key.toLowerCase();
-        if (key in this.keys) {
-            this.keys[key] = pressed;
-            e.preventDefault();
+    handleKey(event, isDown) {
+        if (!this.isAlive) return;
+
+        const key = event.key.toLowerCase();
+
+        // Registrar ação para resetar timer de idle
+        if (isDown) {
+            this.registerAction();
         }
 
-        // Ações especiais
-        if (pressed) {
-            switch (key) {
-                case ' ':
-                case 'w':
-                    this.jump();
-                    e.preventDefault();
-                    break;
-            }
+        if (key === 'w' || key === 'arrowup') this.keys.w = isDown;
+        if (key === 'a' || key === 'arrowleft') this.keys.a = isDown;
+        if (key === 's' || key === 'arrowdown') this.keys.s = isDown;
+        if (key === 'd' || key === 'arrowright') this.keys.d = isDown;
+
+        // Q - Alternar entre modo magia normal e poderes JS
+        if (key === 'q' && isDown) {
+            this.magicSystem.toggleMode();
+            this.registerAction();
+        }
+
+        // E - Trocar poder atual (apenas no modo poderes)
+        if (key === 'e' && isDown) {
+            this.magicSystem.switchPower();
+            this.registerAction();
+        }
+
+        // Pular
+        if ((key === 'w' || key === ' ' || key === 'arrowup') && isDown && this.isGrounded) {
+            this.jump();
         }
     }
 
-    handleMouseMove(e) {
+    handleMouseMove(event) {
         const rect = this.app.view.getBoundingClientRect();
-        const scaleX = this.app.renderer.width / rect.width;
-        const scaleY = this.app.renderer.height / rect.height;
+        this.mousePos.x = event.clientX - rect.left;
+        this.mousePos.y = event.clientY - rect.top;
 
-        this.mousePos.x = (e.clientX - rect.left) * scaleX;
-        this.mousePos.y = (e.clientY - rect.top) * scaleY;
+        // Registrar ação para resetar timer de idle
+        this.registerAction();
     }
 
-    handleMouseClick(e) {
-        e.preventDefault();
+    handleMouseClick(event) {
+        if (!this.isAlive) return;
         this.castSpell();
+        this.registerAction();
+    }
+
+    registerAction() {
+        this.lastActionTime = Date.now();
+        this.idleTimer = 0;
+
+        // Se estava em idle, voltar ao normal
+        if (this.isIdle) {
+            this.isIdle = false;
+            this.idleAnimationPhase = 0;
+            this.idleFrameIndex = 0;
+        }
+    }
+
+    startVictoryAnimation() {
+        this.isVictory = true;
+        this.setAnimation('victory');
+        this.registerAction(); // Para não entrar em idle durante a vitória
+    }
+
+    stopVictoryAnimation() {
+        this.isVictory = false;
     }
 
     jump() {
@@ -196,7 +282,10 @@ export class Player {
 
         if (length > 0) {
             const direction = { x: dx / length, y: dy / length };
-            this.magicSystem.castSpell(this.sprite.x, this.sprite.y - 32, direction);
+
+            // Passar lista de inimigos para o sistema de magia
+            const enemies = this.level ? this.level.enemyManager.getAliveEnemies() : [];
+            this.magicSystem.castSpell(this.sprite.x, this.sprite.y - 32, direction, enemies);
         }
 
         // Virar personagem na direção do cast
@@ -255,7 +344,7 @@ export class Player {
     }
 
     setAnimation(animName) {
-        if (this.currentAnimation === animName || !this.animations[animName]) return;
+        if (!this.sprite || this.currentAnimation === animName || !this.animations[animName]) return;
 
         this.currentAnimation = animName;
         this.sprite.textures = this.animations[animName];
@@ -269,6 +358,12 @@ export class Player {
             case 'attack':
             case 'cast':
                 this.sprite.animationSpeed = 0.3;
+                break;
+            case 'idleStand':
+                this.sprite.animationSpeed = 0.1; // Mais lenta para idle
+                break;
+            case 'victory':
+                this.sprite.animationSpeed = 0.15; // Velocidade média para vitória
                 break;
             default:
                 this.sprite.animationSpeed = 0.15;
@@ -284,6 +379,10 @@ export class Player {
     }
 
     getBounds() {
+        if (!this.sprite) {
+            return { x: 0, y: 0, width: 0, height: 0 };
+        }
+
         return {
             x: this.sprite.x - this.sprite.width / 2,
             y: this.sprite.y - this.sprite.height,
@@ -293,6 +392,8 @@ export class Player {
     }
 
     checkGroundCollision(groundY) {
+        if (!this.sprite) return false;
+
         const bounds = this.getBounds();
         if (bounds.y + bounds.height >= groundY && this.velocity.y >= 0) {
             this.sprite.y = groundY;
@@ -304,12 +405,23 @@ export class Player {
     }
 
     update(deltaTime) {
-        if (!this.isAlive) return;
+        if (!this.isAlive || !this.sprite) return;
+
+        // Verificar timer de idle (apenas se não estiver em vitória)
+        if (!this.isVictory) {
+            this.updateIdleTimer(deltaTime);
+        }
 
         // Aplicar movimento horizontal
         let targetVelX = 0;
-        if (this.keys.a) targetVelX -= this.speed;
-        if (this.keys.d) targetVelX += this.speed;
+        if (this.keys.a) {
+            targetVelX -= this.speed;
+            this.registerAction();
+        }
+        if (this.keys.d) {
+            targetVelX += this.speed;
+            this.registerAction();
+        }
 
         this.velocity.x = targetVelX;
 
@@ -320,6 +432,9 @@ export class Player {
 
         // Agachar
         const crouching = this.keys.s && this.isGrounded;
+        if (crouching) {
+            this.registerAction();
+        }
 
         // Atualizar posição
         this.sprite.x += this.velocity.x * deltaTime;
@@ -344,7 +459,77 @@ export class Player {
         this.magicSystem.update(deltaTime);
     }
 
+    updateIdleTimer(deltaTime) {
+        // Incrementar timer de idle
+        this.idleTimer += deltaTime * 1000; // converter para milissegundos
+
+        // Verificar se deve entrar em idle
+        if (this.idleTimer >= this.idleThreshold && !this.isIdle && !this.isVictory) {
+            // Verificar se não há movimento
+            const isMoving = Math.abs(this.velocity.x) > 10 || this.keys.a || this.keys.d || this.keys.s;
+
+            if (!isMoving && this.isGrounded) {
+                this.startIdleAnimation();
+            }
+        }
+
+        // Atualizar animação de idle se estiver ativa
+        if (this.isIdle) {
+            this.updateIdleAnimation(deltaTime);
+        }
+    }
+
+    startIdleAnimation() {
+        this.isIdle = true;
+        this.idleAnimationPhase = 1; // Começar com a primeira sequência
+        this.idleFrameIndex = 0;
+        this.setAnimation('idleStand');
+    }
+
+    updateIdleAnimation(deltaTime) {
+        if (!this.sprite || !this.animations.idleStand || this.animations.idleStand.length === 0) return;
+
+        const frames = this.animations.idleStand;
+
+        if (this.idleAnimationPhase === 1) {
+            // Primeira sequência: frames 0 e 1 apenas uma vez
+            if (this.idleFrameIndex < 2) {
+                // Controlar velocidade da animação
+                this.sprite.gotoAndPlay(this.idleFrameIndex);
+
+                // Avançar frame a cada 500ms
+                if (this.idleTimer % 500 < deltaTime * 1000) {
+                    this.idleFrameIndex++;
+
+                    if (this.idleFrameIndex >= 2) {
+                        this.idleAnimationPhase = 2; // Passar para o loop
+                        this.idleFrameIndex = 2; // Começar do frame 2
+                    }
+                }
+            }
+        } else if (this.idleAnimationPhase === 2) {
+            // Loop: frames 2 em diante
+            const loopFrames = frames.slice(2);
+            if (loopFrames.length > 0) {
+                const frameIndex = Math.floor((this.idleTimer / 300) % loopFrames.length);
+                this.sprite.gotoAndPlay(frameIndex + 2);
+            }
+        }
+    }
+
     updateAnimation(crouching) {
+        // Se está em vitória, manter animação de vitória
+        if (this.isVictory) {
+            this.setAnimation('victory');
+            return;
+        }
+
+        // Se está em idle, não mudar animação
+        if (this.isIdle) {
+            return;
+        }
+
+        // Lógica normal de animação
         if (crouching) {
             this.setAnimation('crouch');
         } else if (!this.isGrounded) {

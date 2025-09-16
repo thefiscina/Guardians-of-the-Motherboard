@@ -1,7 +1,7 @@
 // src/cutscene.js
 export function runCutscene(app, onComplete = () => { }, opts = {}) {
     const CONFIG = {
-        imagePath: 'assets/cenas/cena1.png', // 6 quadros (2x3)
+        imagePath: 'assets/cenas/cena2.png', // 6 quadros (2x3)
         cols: 2,
         rows: 3,
         panelDuration: 2200,

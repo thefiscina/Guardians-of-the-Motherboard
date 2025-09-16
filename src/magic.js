@@ -1,6 +1,8 @@
-// src/magic.js - Sistema de ataques mágicos
+// src/magic.js - Sistema de ataques mágicos com poderes JavaScript
+import { JavaScriptPowers } from './powers.js';
+
 export class MagicSpell {
-    constructor(app, x, y, direction, damage = 30) {
+    constructor(app, x, y, direction, damage = 30, powerType = 'basic') {
         this.app = app;
         this.damage = damage;
         this.speed = 400;
@@ -8,52 +10,81 @@ export class MagicSpell {
         this.isActive = true;
         this.lifetime = 3000; // 3 segundos
         this.age = 0;
+        this.powerType = powerType;
 
         this.createSprite(x, y);
     }
 
     createSprite(x, y) {
-        // Criar projétil mágico visual
+        // Criar projétil mágico visual baseado no tipo de poder
         this.sprite = new PIXI.Graphics();
 
+        const colors = {
+            basic: { core: 0x00ffff, ring: 0x88ffff },
+            reduce: { core: 0xff6b35, ring: 0xff8c5a },
+            map: { core: 0x4ecdc4, ring: 0x6ed4cc },
+            filter: { core: 0x45b7d1, ring: 0x6bc5d8 },
+            foreach: { core: 0xf7931e, ring: 0xf9a851 },
+            find: { core: 0x9b59b6, ring: 0xb06fc7 },
+            sort: { core: 0xe74c3c, ring: 0xed6a5a }
+        };
+
+        const color = colors[this.powerType] || colors.basic;
+
         // Núcleo brilhante
-        this.sprite.beginFill(0x00ffff);
-        this.sprite.drawCircle(0, 0, 6);
+        this.sprite.beginFill(color.core);
+        this.sprite.drawCircle(0, 0, 8);
         this.sprite.endFill();
 
         // Anel externo
-        this.sprite.lineStyle(2, 0x88ffff, 0.8);
-        this.sprite.drawCircle(0, 0, 10);
+        this.sprite.lineStyle(3, color.ring, 0.8);
+        this.sprite.drawCircle(0, 0, 12);
 
-        // Particulas internas
-        for (let i = 0; i < 6; i++) {
-            const angle = (i / 6) * Math.PI * 2;
-            const px = Math.cos(angle) * 4;
-            const py = Math.sin(angle) * 4;
-
-            this.sprite.beginFill(0xffffff, 0.6);
-            this.sprite.drawCircle(px, py, 1);
-            this.sprite.endFill();
-        }
+        // Símbolo do poder no centro
+        this.addPowerSymbol(color.core);
 
         this.sprite.x = x;
         this.sprite.y = y;
 
         // Efeito de brilho
-        this.glowFilter = new PIXI.filters.GlowFilter({
-            distance: 15,
-            outerStrength: 2,
-            innerStrength: 1,
-            color: 0x00ffff,
-            quality: 0.5
-        });
-
-        this.sprite.filters = [this.glowFilter];
+        try {
+            this.glowFilter = new PIXI.filters.GlowFilter({
+                distance: 20,
+                outerStrength: 3,
+                innerStrength: 1,
+                color: color.core,
+                quality: 0.5
+            });
+            this.sprite.filters = [this.glowFilter];
+        } catch (e) {
+            // Fallback se filtros não estiverem disponíveis
+        }
 
         this.app.stage.addChild(this.sprite);
-
-        // Criar trail de partículas
         this.createTrail();
+    }
+
+    addPowerSymbol(color) {
+        const symbols = {
+            reduce: '∑',
+            map: '→',
+            filter: '⚡',
+            foreach: '∀',
+            find: '?',
+            sort: '↕'
+        };
+
+        const symbol = symbols[this.powerType];
+        if (symbol) {
+            const text = new PIXI.Text(symbol, {
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fill: 0xffffff,
+                fontWeight: 'bold'
+            });
+            text.anchor.set(0.5);
+            this.sprite.addChild(text);
+        }
     }
 
     createTrail() {
@@ -174,32 +205,185 @@ export class MagicSystem {
         this.maxMana = 100;
         this.manaRegenRate = 20; // mana por segundo
         this.spellManaCost = 15;
+
+        // Sistema de poderes JavaScript
+        this.powers = new JavaScriptPowers();
+        this.isPowerMode = false; // false = feitiço normal, true = poder JavaScript
+    }
+
+    toggleMode() {
+        this.isPowerMode = !this.isPowerMode;
+        const mode = this.isPowerMode ? 'JavaScript Powers' : 'Normal Magic';
+
+        // Mostrar feedback visual
+        this.showModeChange(mode);
+
+        return this.isPowerMode;
+    }
+
+    showModeChange(mode) {
+        // Criar texto temporário para mostrar mudança de modo
+        const text = new PIXI.Text(mode, {
+            fontFamily: 'monospace',
+            fontSize: 16,
+            fill: 0x00ff88,
+            stroke: 0x000000,
+            strokeThickness: 2
+        });
+
+        text.anchor.set(0.5);
+        text.x = this.app.renderer.width / 2;
+        text.y = 100;
+        text.alpha = 0;
+
+        this.app.stage.addChild(text);
+
+        // Animação de fade in/out
+        let fadeIn = true;
+        let alpha = 0;
+
+        const animate = () => {
+            if (fadeIn) {
+                alpha += 0.05;
+                if (alpha >= 1) {
+                    fadeIn = false;
+                    setTimeout(() => fadeIn = false, 1000); // Esperar 1 segundo
+                }
+            } else {
+                alpha -= 0.03;
+            }
+
+            text.alpha = Math.max(0, alpha);
+
+            if (alpha > 0) {
+                requestAnimationFrame(animate);
+            } else {
+                if (text.parent) {
+                    text.parent.removeChild(text);
+                }
+            }
+        };
+
+        animate();
+    }
+
+    switchPower() {
+        if (this.isPowerMode) {
+            return this.powers.switchPower();
+        }
+        return null;
     }
 
     canCastSpell() {
         const now = Date.now();
-        return (now - this.lastCastTime >= this.castCooldown) &&
-            (this.mana >= this.spellManaCost);
+
+        if (this.isPowerMode) {
+            const currentPower = this.powers.getCurrentPower();
+            return (now - this.lastCastTime >= this.castCooldown) &&
+                (this.mana >= currentPower.manaCost) &&
+                this.powers.canCast();
+        } else {
+            return (now - this.lastCastTime >= this.castCooldown) &&
+                (this.mana >= this.spellManaCost);
+        }
     }
 
-    castSpell(x, y, direction) {
+    castSpell(x, y, direction, enemies = []) {
         if (!this.canCastSpell()) return false;
 
-        // Consumir mana
-        this.mana = Math.max(0, this.mana - this.spellManaCost);
-        this.lastCastTime = Date.now();
+        if (this.isPowerMode) {
+            // Usar poder JavaScript
+            const currentPower = this.powers.getCurrentPower();
+            this.mana = Math.max(0, this.mana - currentPower.manaCost);
+            this.lastCastTime = Date.now();
 
-        // Criar feitiço
-        const spell = new MagicSpell(this.app, x, y, direction);
-        this.spells.push(spell);
+            // Calcular posição do alvo
+            const targetX = x + direction.x * 100;
+            const targetY = y + direction.y * 100;
 
-        // Efeito sonoro (placeholder)
-        this.playCastSound();
+            // Executar poder
+            this.powers.castPower(this.player, enemies, targetX, targetY);
+
+            // Criar efeito visual de poder
+            this.createPowerEffect(targetX, targetY, currentPower);
+
+        } else {
+            // Feitiço normal
+            this.mana = Math.max(0, this.mana - this.spellManaCost);
+            this.lastCastTime = Date.now();
+
+            const spell = new MagicSpell(this.app, x, y, direction, 30, 'basic');
+            this.spells.push(spell);
+
+            this.playCastSound();
+        }
 
         return true;
     }
 
-    playCastSound() {
+    createPowerEffect(x, y, power) {
+        // Efeito visual para poderes JavaScript
+        const effect = new PIXI.Graphics();
+
+        // Círculo de poder
+        effect.beginFill(power.color, 0.3);
+        effect.drawCircle(0, 0, power.range);
+        effect.endFill();
+
+        // Borda brilhante
+        effect.lineStyle(4, power.color, 0.8);
+        effect.drawCircle(0, 0, power.range);
+
+        effect.x = x;
+        effect.y = y;
+        effect.alpha = 0;
+
+        // Texto do poder
+        const powerText = new PIXI.Text(power.name.toUpperCase(), {
+            fontFamily: 'monospace',
+            fontSize: 20,
+            fill: power.color,
+            stroke: 0x000000,
+            strokeThickness: 3,
+            fontWeight: 'bold'
+        });
+        powerText.anchor.set(0.5);
+        powerText.y = -power.range - 30;
+        effect.addChild(powerText);
+
+        this.app.stage.addChild(effect);
+
+        // Animação do efeito
+        let scale = 0.1;
+        let alpha = 0;
+        let growing = true;
+
+        const animate = () => {
+            if (growing) {
+                scale += 0.05;
+                alpha += 0.1;
+                if (scale >= 1.2) {
+                    growing = false;
+                }
+            } else {
+                alpha -= 0.05;
+                scale += 0.02;
+            }
+
+            effect.scale.set(scale);
+            effect.alpha = Math.max(0, alpha);
+
+            if (alpha > 0) {
+                requestAnimationFrame(animate);
+            } else {
+                if (effect.parent) {
+                    effect.parent.removeChild(effect);
+                }
+            }
+        };
+
+        animate();
+    } playCastSound() {
         // Placeholder para efeito sonoro
         // Poderia carregar um arquivo de áudio aqui
         try {

@@ -1,6 +1,53 @@
 // src/main.js - Ponto de entrada do jogo
 import './game.js';
 
+// ===== EXEMPLO DE USO DAS HUD SPRITES =====
+// Descomente as linhas abaixo para testar as HUD sprites
+
+/*
+import { HUDSprites, loadHUDSprites } from './hudSprites.js';
+
+// Exemplo de uso das HUD sprites
+async function exemploHUDSprites() {
+    // Criar aplicação PIXI básica para teste
+    const app = new PIXI.Application({
+        width: 800,
+        height: 600,
+        backgroundColor: 0x1099bb
+    });
+    document.body.appendChild(app.view);
+    
+    // Carregar as sprites do HUD
+    await loadHUDSprites();
+    
+    // Exemplo: criar botão de pausa
+    const pauseButton = new PIXI.Sprite(HUDSprites.pause);
+    pauseButton.anchor.set(0.5);
+    pauseButton.position.set(100, 100);
+    pauseButton.interactive = true;
+    pauseButton.buttonMode = true;
+    
+    pauseButton.on('pointerdown', () => {
+        console.log('Pause button clicked!');
+    });
+    
+    app.stage.addChild(pauseButton);
+    
+    // Exemplo: criar setas direcionais
+    const arrowUp = new PIXI.Sprite(HUDSprites.arrowUp);
+    arrowUp.position.set(200, 50);
+    app.stage.addChild(arrowUp);
+    
+    // Exemplo: criar ícone de poder reduce
+    const reduceIcon = new PIXI.Sprite(HUDSprites.reduce);
+    reduceIcon.position.set(300, 100);
+    app.stage.addChild(reduceIcon);
+}
+
+// Chame a função para testar
+// exemploHUDSprites();
+*/
+
 // Tratamento de erros globais
 window.addEventListener('error', (e) => {
     console.error('Erro no jogo:', e.error);

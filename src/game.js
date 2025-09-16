@@ -148,7 +148,7 @@ export class Game {
             onLevelComplete: () => this.showVictory(),
             onHealthChange: (health) => {
                 this.gameData.playerHealth = health;
-                this.hud.updateHealth(health, this.gameData.maxHealth);
+                this.hud.updateStats(health, this.gameData.playerMana || 100);
             },
             onScoreChange: (score) => {
                 this.gameData.score = score;
@@ -157,7 +157,7 @@ export class Game {
             onEnemyDefeated: () => {
                 this.gameData.enemiesDefeated++;
                 this.gameData.score += 100; // Pontos por inimigo
-                this.hud.updateEnemies(this.gameData.enemiesDefeated, this.gameData.totalEnemies);
+                this.hud.updateEnemyCount(this.gameData.enemiesDefeated, this.gameData.totalEnemies);
                 this.hud.updateScore(this.gameData.score);
             }
         });
@@ -178,6 +178,12 @@ export class Game {
 
     showVictory() {
         this.currentState = 'victory';
+
+        // Ativar animação de vitória no jogador
+        if (this.level && this.level.player) {
+            this.level.player.startVictoryAnimation();
+        }
+
         this.showOverlay('VITÓRIA!', `Parabéns! Você protegeu a motherboard!\\n\\nPontuação: ${this.gameData.score}\\nInimigos derrotados: ${this.gameData.enemiesDefeated}`, [
             { text: 'JOGAR NOVAMENTE', action: () => this.restartGame() },
             { text: 'MENU PRINCIPAL', action: () => this.returnToMenu() }
@@ -251,6 +257,11 @@ export class Game {
     }
 
     cleanup() {
+        // Parar animação de vitória se estiver ativa
+        if (this.level && this.level.player) {
+            this.level.player.stopVictoryAnimation();
+        }
+
         // Limpar nível atual
         if (this.level) {
             this.level.destroy();

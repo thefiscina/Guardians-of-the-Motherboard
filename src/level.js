@@ -46,18 +46,38 @@ export class GameLevel {
             onPlayerDeath: this.callbacks.onPlayerDeath
         });
 
+        // Aguardar inicialização completa do player
+        await this.waitForPlayerInit();
+
+        // Conectar o player ao nível para acesso aos inimigos
+        this.player.setLevel(this);
+
         // Criar gerenciador de inimigos
         this.enemyManager = new EnemyManager(this.app, this);
         this.gameData.totalEnemies = this.requiredEnemiesDefeated;
 
         // Spawnar inimigos iniciais
-        this.spawnInitialEnemies();
+        await this.spawnInitialEnemies();
 
         // Mostrar texto "LEVEL 1"
         this.showLevelText();
 
         // Iniciar loop do jogo
         this.startGameLoop();
+    }
+
+    async waitForPlayerInit() {
+        // Aguardar até que o sprite do player seja criado
+        return new Promise((resolve) => {
+            const checkPlayer = () => {
+                if (this.player && this.player.sprite) {
+                    resolve();
+                } else {
+                    setTimeout(checkPlayer, 50);
+                }
+            };
+            checkPlayer();
+        });
     }
 
     async createBackground() {
@@ -93,33 +113,93 @@ export class GameLevel {
     }
 
     createTiledBackground(tilesetTexture) {
-        // Criar sprites do tileset para decoração
+        // Criar sprites do tileset para um cenário mais elaborado
         const tileSize = 16;
-        const tilesX = Math.ceil(this.app.renderer.width / tileSize) + 1;
-        const tilesY = Math.ceil(this.app.renderer.height / tileSize) + 1;
+        const tilesX = Math.ceil(this.app.renderer.width / tileSize);
+        const tilesY = Math.ceil(this.app.renderer.height / tileSize);
 
+        // Criar diferentes variações de tiles do tileset
+        const tileVariations = [];
+        const cols = Math.floor(tilesetTexture.width / tileSize);
+        const rows = Math.floor(tilesetTexture.height / tileSize);
+
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const rect = new PIXI.Rectangle(col * tileSize, row * tileSize, tileSize, tileSize);
+                tileVariations.push(new PIXI.Texture(tilesetTexture.baseTexture, rect));
+            }
+        }
+
+        // Criar padrão de fundo com tiles
         for (let x = 0; x < tilesX; x++) {
             for (let y = 0; y < tilesY; y++) {
-                if (Math.random() > 0.95) { // Apenas alguns tiles aleatórios
-                    const tile = new PIXI.Sprite(tilesetTexture);
+                // Densidade baseada na posição
+                let probability = 0.1; // Base
+
+                // Mais denso no chão
+                if (y > tilesY * 0.8) probability = 0.4;
+                // Circuitos esparsos no meio
+                else if (y > tilesY * 0.3) probability = 0.15;
+                // Raro no topo
+                else probability = 0.05;
+
+                if (Math.random() < probability) {
+                    const tileIndex = Math.floor(Math.random() * tileVariations.length);
+                    const tile = new PIXI.Sprite(tileVariations[tileIndex]);
+
                     tile.width = tileSize;
                     tile.height = tileSize;
                     tile.x = x * tileSize;
                     tile.y = y * tileSize;
-                    tile.alpha = 0.3;
+                    tile.alpha = 0.4;
                     tile.tint = 0x00ff88;
+
                     this.backgroundContainer.addChild(tile);
                 }
             }
         }
+
+        // Adicionar linhas de conexão para simular circuitos
+        this.createCircuitLines();
+    }
+
+    createCircuitLines() {
+        const graphics = new PIXI.Graphics();
+        graphics.lineStyle(1, 0x00ff88, 0.3);
+
+        // Linhas horizontais
+        for (let i = 0; i < 8; i++) {
+            const y = (this.app.renderer.height / 8) * i;
+            graphics.moveTo(0, y);
+            graphics.lineTo(this.app.renderer.width, y);
+
+            // Adicionar "nós" nos circuitos
+            for (let j = 0; j < 15; j++) {
+                const x = (this.app.renderer.width / 15) * j;
+                if (Math.random() < 0.3) {
+                    graphics.beginFill(0x00ff88, 0.5);
+                    graphics.drawCircle(x, y, 2);
+                    graphics.endFill();
+                }
+            }
+        }
+
+        // Linhas verticais
+        for (let i = 0; i < 12; i++) {
+            const x = (this.app.renderer.width / 12) * i;
+            graphics.moveTo(x, 0);
+            graphics.lineTo(x, this.app.renderer.height);
+        }
+
+        this.backgroundContainer.addChild(graphics);
     }
 
     createPlatforms() {
-        // Chão principal
-        const ground = this.createPlatform(0, this.groundY, this.app.renderer.width, 80, 0x00ff88);
+        // Chão principal com visual de motherboard
+        const ground = this.createTiledPlatform(0, this.groundY, this.app.renderer.width, 80, true);
         this.platforms.push(ground);
 
-        // Plataformas flutuantes
+        // Plataformas flutuantes com design de circuitos
         const platforms = [
             { x: 200, y: 450, width: 150, height: 20 },
             { x: 450, y: 380, width: 120, height: 20 },
@@ -129,40 +209,56 @@ export class GameLevel {
         ];
 
         platforms.forEach(platform => {
-            const p = this.createPlatform(platform.x, platform.y, platform.width, platform.height, 0x1a2332);
+            const p = this.createTiledPlatform(platform.x, platform.y, platform.width, platform.height, false);
             this.platforms.push(p);
         });
     }
 
-    createPlatform(x, y, width, height, color) {
+    createTiledPlatform(x, y, width, height, isGround = false) {
+        const container = new PIXI.Container();
+
+        // Base da plataforma
         const platform = new PIXI.Graphics();
-        platform.beginFill(color);
+        const baseColor = isGround ? 0x1a4d1a : 0x1a2332;
+
+        platform.beginFill(baseColor);
         platform.drawRect(0, 0, width, height);
         platform.endFill();
 
-        // Adicionar borda
+        // Borda tecnológica
         platform.lineStyle(2, 0x00ff88, 0.8);
         platform.drawRect(0, 0, width, height);
 
-        platform.x = x;
-        platform.y = y;
+        // Adicionar padrão de circuito na superfície
+        if (isGround) {
+            platform.lineStyle(1, 0x00ff88, 0.6);
+            for (let i = 0; i < width; i += 32) {
+                platform.moveTo(i, 0);
+                platform.lineTo(i + 16, 8);
+                platform.lineTo(i + 32, 0);
+            }
+        }
 
-        this.levelContainer.addChild(platform);
+        container.addChild(platform);
+        container.x = x;
+        container.y = y;
+
+        this.levelContainer.addChild(container);
 
         return {
             x: x,
             y: y,
             width: width,
             height: height,
-            sprite: platform
+            sprite: container
         };
     }
 
-    spawnInitialEnemies() {
+    async spawnInitialEnemies() {
         // Spawnar alguns inimigos iniciais
-        this.enemyManager.spawnEnemy(800, 400);
-        this.enemyManager.spawnEnemy(150, 400);
-        this.enemyManager.spawnEnemy(600, 300);
+        await this.enemyManager.spawnEnemy(800, 400);
+        await this.enemyManager.spawnEnemy(150, 400);
+        await this.enemyManager.spawnEnemy(600, 300);
     }
 
     showLevelText() {
@@ -253,11 +349,11 @@ export class GameLevel {
             this.player.update(deltaTime);
             this.checkPlayerCollisions();
 
-            // Atualizar mana no HUD
+            // Atualizar stats no HUD (vida e mana)
             if (this.callbacks.hud && this.player.magicSystem) {
+                const health = this.player.health;
                 const mana = this.player.magicSystem.mana;
-                const maxMana = this.player.magicSystem.maxMana;
-                this.callbacks.hud.updateMana(mana, maxMana);
+                this.callbacks.hud.updateStats(health, mana);
             }
         }
 
@@ -276,6 +372,11 @@ export class GameLevel {
     }
 
     checkPlayerCollisions() {
+        // Verificar se o player e sprite existem
+        if (!this.player || !this.player.sprite) {
+            return;
+        }
+
         // Verificar colisão com plataformas
         let onGround = false;
 

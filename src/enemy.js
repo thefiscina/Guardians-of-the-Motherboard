@@ -1,4 +1,6 @@
 // src/enemy.js - Sistema de inimigos vírus
+import { sliceGrid } from './sliceSheet.js';
+
 export class Enemy {
     constructor(app, x, y, type = 'virus') {
         this.app = app;
@@ -24,21 +26,76 @@ export class Enemy {
         this.alertRange = 120;
         this.attackRange = 50;
 
+        // Animação
+        this.animationFrame = 0;
+        this.animationSpeed = 0.1;
+        this.animations = {};
+
         this.createSprite(x, y);
     }
 
-    createSprite(x, y) {
-        // Criar sprite simples para o vírus (placeholder)
-        this.sprite = new PIXI.Graphics();
-        this.sprite.beginFill(0xff4444);
-        this.sprite.drawRect(-16, -16, 32, 32);
-        this.sprite.endFill();
+    async createSprite(x, y) {
+        try {
+            // Tentar carregar sprite do vírus
+            const virusTexture = await PIXI.Assets.load('assets/sprites/virus.png');
 
-        // Adicionar "olhos" ao vírus
-        this.sprite.beginFill(0xff0000);
-        this.sprite.drawRect(-12, -12, 8, 8);
-        this.sprite.drawRect(4, -12, 8, 8);
-        this.sprite.endFill();
+            // Verificar se é um spritesheet ou imagem única
+            let frames;
+
+            // Se a imagem é maior que 64px, assumir que é um spritesheet
+            if (virusTexture.width > 64 || virusTexture.height > 64) {
+                // Calcular colunas baseado na largura
+                const frameWidth = 32; // Assumir frames de 32x32
+                const frameHeight = 32;
+                const cols = Math.floor(virusTexture.width / frameWidth);
+                const rows = Math.floor(virusTexture.height / frameHeight);
+
+                frames = sliceGrid(virusTexture, {
+                    cols: cols,
+                    rows: rows,
+                    margin: 0,
+                    spacing: 0
+                });
+            } else {
+                // Imagem única, usar como frame único
+                frames = [virusTexture];
+            }
+
+            this.animations = {
+                walk: frames.length > 1 ? frames : [frames[0]],
+                idle: [frames[0]]
+            };
+
+            this.sprite = new PIXI.AnimatedSprite(this.animations.idle);
+            this.sprite.anchor.set(0.5, 1.0);
+            this.sprite.animationSpeed = 0.15;
+
+            // Manter proporção da imagem original
+            const originalWidth = frames[0].width;
+            const originalHeight = frames[0].height;
+            const targetSize = 32;
+
+            // Calcular escala mantendo proporção
+            const scale = Math.min(targetSize / originalWidth, targetSize / originalHeight);
+            this.sprite.width = originalWidth * scale;
+            this.sprite.height = originalHeight * scale;
+
+            this.sprite.play();
+
+        } catch (error) {
+            console.warn('Não foi possível carregar virus.png, usando placeholder:', error);
+            // Fallback para sprite gráfico
+            this.sprite = new PIXI.Graphics();
+            this.sprite.beginFill(0xff4444);
+            this.sprite.drawRect(-16, -16, 32, 32);
+            this.sprite.endFill();
+
+            // Adicionar "olhos" ao vírus
+            this.sprite.beginFill(0xff0000);
+            this.sprite.drawRect(-12, -12, 8, 8);
+            this.sprite.drawRect(4, -12, 8, 8);
+            this.sprite.endFill();
+        }
 
         this.sprite.x = x;
         this.sprite.y = y;
@@ -52,7 +109,7 @@ export class Enemy {
 
         this.healthBar.addChild(this.healthBarBg);
         this.healthBar.addChild(this.healthBarFill);
-        this.healthBar.y = -30;
+        this.healthBar.y = -40;
         this.sprite.addChild(this.healthBar);
 
         this.app.stage.addChild(this.sprite);
@@ -80,7 +137,7 @@ export class Enemy {
     }
 
     takeDamage(amount) {
-        if (!this.isAlive) return;
+        if (!this.isAlive || !this.sprite) return;
 
         this.health -= amount;
         this.updateHealthBar();
@@ -100,6 +157,8 @@ export class Enemy {
     }
 
     die() {
+        if (!this.isAlive || !this.sprite) return;
+
         this.isAlive = false;
         this.state = 'dead';
 
@@ -111,6 +170,8 @@ export class Enemy {
         };
 
         const animate = () => {
+            if (!this.sprite) return; // Verificação adicional durante a animação
+
             deathTween.alpha *= 0.95;
             deathTween.scale *= 0.98;
             deathTween.rotation += 0.1;
@@ -130,7 +191,7 @@ export class Enemy {
     }
 
     update(deltaTime, player) {
-        if (!this.isAlive) return;
+        if (!this.isAlive || !this.sprite || !player || !player.sprite) return;
 
         this.attackCooldown = Math.max(0, this.attackCooldown - deltaTime * 1000);
 
@@ -288,20 +349,38 @@ export class EnemyManager {
         ];
     }
 
-    spawnEnemy(x, y) {
+    async spawnEnemy(x, y) {
         if (this.enemies.length >= this.maxEnemies) return;
 
         const enemy = new Enemy(this.app, x, y);
+
+        // Aguardar a criação do sprite antes de adicionar ao array
+        await this.waitForEnemySprite(enemy);
+
         this.enemies.push(enemy);
 
         return enemy;
     }
 
-    spawnRandomEnemy() {
+    async waitForEnemySprite(enemy) {
+        // Aguardar até que o sprite do enemy seja criado
+        return new Promise((resolve) => {
+            const checkSprite = () => {
+                if (enemy.sprite) {
+                    resolve();
+                } else {
+                    setTimeout(checkSprite, 50);
+                }
+            };
+            checkSprite();
+        });
+    }
+
+    async spawnRandomEnemy() {
         if (this.enemies.length >= this.maxEnemies) return;
 
         const pos = this.spawnPositions[Math.floor(Math.random() * this.spawnPositions.length)];
-        this.spawnEnemy(pos.x, pos.y);
+        await this.spawnEnemy(pos.x, pos.y);
     }
 
     update(deltaTime, player) {
