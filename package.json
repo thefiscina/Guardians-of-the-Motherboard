@@ -1,0 +1,25 @@
+{
+  "name": "guardians-of-the-motherboard-optimizer",
+  "version": "1.0.0",
+  "description": "Otimizador de imagens para o jogo Guardians of the Motherboard",
+  "main": "optimize-images.js",
+  "scripts": {
+    "optimize": "node optimize-images.js",
+    "optimize:backup": "node optimize-images.js --backup",
+    "install-deps": "npm install sharp --save-dev"
+  },
+  "keywords": [
+    "image-optimization",
+    "game-assets",
+    "pixijs",
+    "compression"
+  ],
+  "author": "fiscina",
+  "license": "MIT",
+  "devDependencies": {
+    "sharp": "^0.32.6"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

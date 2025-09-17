@@ -36,49 +36,45 @@ export class Enemy {
 
     async createSprite(x, y) {
         try {
-            // Tentar carregar sprite do vírus
+            // Carregar sprite do vírus
             const virusTexture = await PIXI.Assets.load('assets/sprites/virus.png');
 
-            // Verificar se é um spritesheet ou imagem única
-            let frames;
+            // Medidas corretas baseadas nas informações fornecidas:
+            // Cada frame: 324x324px
+            // Primeiro frame posição: x=358px, y=425px (incluindo espaço em branco)
+            const frameWidth = 324;
+            const frameHeight = 324;
+            const startX = 358;
+            const startY = 425;
 
-            // Se a imagem é maior que 64px, assumir que é um spritesheet
-            if (virusTexture.width > 64 || virusTexture.height > 64) {
-                // Calcular colunas baseado na largura
-                const frameWidth = 32; // Assumir frames de 32x32
-                const frameHeight = 32;
-                const cols = Math.floor(virusTexture.width / frameWidth);
-                const rows = Math.floor(virusTexture.height / frameHeight);
+            console.log(`Virus texture size: ${virusTexture.width}x${virusTexture.height}`);
+            console.log(`Frame size: ${frameWidth}x${frameHeight}`);
+            console.log(`Starting position: ${startX}, ${startY}`);
 
-                frames = sliceGrid(virusTexture, {
-                    cols: cols,
-                    rows: rows,
-                    margin: 0,
-                    spacing: 0
-                });
-            } else {
-                // Imagem única, usar como frame único
-                frames = [virusTexture];
+            // Criar todas as 8 texturas com as posições corretas
+            const allFrames = [];
+            for (let i = 0; i < 8; i++) {
+                const frameX = startX + (i * frameWidth);
+                const rect = new PIXI.Rectangle(frameX, startY, frameWidth, frameHeight);
+                allFrames.push(new PIXI.Texture(virusTexture.baseTexture, rect));
+                console.log(`Frame ${i}: x=${frameX}, y=${startY}, w=${frameWidth}, h=${frameHeight}`);
             }
 
+            // Separar frames por direção
             this.animations = {
-                walk: frames.length > 1 ? frames : [frames[0]],
-                idle: [frames[0]]
+                walkRight: [allFrames[0], allFrames[1], allFrames[2], allFrames[3]], // Frames 0-3
+                walkLeft: [allFrames[4], allFrames[5], allFrames[6], allFrames[7]],  // Frames 4-7
+                idle: [allFrames[0]] // Frame inicial como idle
             };
 
             this.sprite = new PIXI.AnimatedSprite(this.animations.idle);
             this.sprite.anchor.set(0.5, 1.0);
-            this.sprite.animationSpeed = 0.15;
+            this.sprite.animationSpeed = 0.12; // Velocidade de animação
 
-            // Manter proporção da imagem original
-            const originalWidth = frames[0].width;
-            const originalHeight = frames[0].height;
-            const targetSize = 32;
-
-            // Calcular escala mantendo proporção
-            const scale = Math.min(targetSize / originalWidth, targetSize / originalHeight);
-            this.sprite.width = originalWidth * scale;
-            this.sprite.height = originalHeight * scale;
+            // Configurar tamanho do sprite (reduzir do tamanho original 324px)
+            const targetSize = 64; // Tamanho final do vírus no jogo
+            const scale = targetSize / frameWidth;
+            this.sprite.scale.set(scale);
 
             this.sprite.play();
 
@@ -87,14 +83,21 @@ export class Enemy {
             // Fallback para sprite gráfico
             this.sprite = new PIXI.Graphics();
             this.sprite.beginFill(0xff4444);
-            this.sprite.drawRect(-16, -16, 32, 32);
+            this.sprite.drawRect(-24, -24, 48, 48);
             this.sprite.endFill();
 
             // Adicionar "olhos" ao vírus
             this.sprite.beginFill(0xff0000);
-            this.sprite.drawRect(-12, -12, 8, 8);
-            this.sprite.drawRect(4, -12, 8, 8);
+            this.sprite.drawCircle(-12, -12, 4);
+            this.sprite.drawCircle(12, -12, 4);
             this.sprite.endFill();
+
+            // Simular animações para o fallback
+            this.animations = {
+                walkRight: [this.sprite],
+                walkLeft: [this.sprite],
+                idle: [this.sprite]
+            };
         }
 
         this.sprite.x = x;
@@ -290,11 +293,29 @@ export class Enemy {
         this.sprite.x += this.velocity.x * deltaTime;
         this.sprite.y += this.velocity.y * deltaTime;
 
-        // Virar sprite baseado na direção
-        if (this.velocity.x < 0) {
-            this.sprite.scale.x = -Math.abs(this.sprite.scale.x);
-        } else if (this.velocity.x > 0) {
-            this.sprite.scale.x = Math.abs(this.sprite.scale.x);
+        // Atualizar animação baseada na direção e movimento
+        if (this.sprite && this.animations) {
+            if (Math.abs(this.velocity.x) > 5) { // Se está se movendo
+                if (this.velocity.x > 0) {
+                    // Movendo para a direita - usar frames 0-3
+                    if (this.sprite.textures !== this.animations.walkRight) {
+                        this.sprite.textures = this.animations.walkRight;
+                        this.sprite.play();
+                    }
+                } else {
+                    // Movendo para a esquerda - usar frames 4-7
+                    if (this.sprite.textures !== this.animations.walkLeft) {
+                        this.sprite.textures = this.animations.walkLeft;
+                        this.sprite.play();
+                    }
+                }
+            } else {
+                // Parado - usar frame idle
+                if (this.sprite.textures !== this.animations.idle) {
+                    this.sprite.textures = this.animations.idle;
+                    this.sprite.gotoAndStop(0);
+                }
+            }
         }
     }
 
