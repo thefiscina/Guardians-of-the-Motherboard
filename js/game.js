@@ -114,7 +114,7 @@ export class Game {
             platformGapY: CONSTANTS.PLATFORM_GAP_Y + tier * 6,
             platformWidthMin: Math.max(50, CONSTANTS.MIN_PLATFORM_WIDTH - tier * 2),
             platformWidthMax: Math.max(70, CONSTANTS.MAX_PLATFORM_WIDTH - tier * 4),
-            movingPlatformChance: Math.min(0.3, tier * 0.03),
+            movingPlatformChance: Math.min(0.4, 0.15 + tier * 0.025), // Começar com 15% e aumentar
 
             // Inimigos - spawn mais conservador
             enemySpawnChance: Math.min(0.28, CONSTANTS.ENEMY_SPAWN_CHANCE + tier * 0.02),
@@ -134,8 +134,8 @@ export class Game {
     generateInitialPlatforms() {
         const startY = this.player.y + 40;
 
-        // Primeira plataforma grande logo abaixo do player
-        this.spawnPlatform(this.width / 2, startY, 120, false);
+        // Primeira plataforma grande logo abaixo do player - agora também se move horizontalmente
+        this.spawnPlatform(this.width / 2, startY, 120, 'horizontal', 25);
 
         let currentY = startY;
 
@@ -145,24 +145,43 @@ export class Game {
 
             const x = rand(60, this.width - 60);
             const width = rand(80, 120);
-            const isMoving = i > 5 && chance(0.1); // Movimento só depois das primeiras
 
-            this.spawnPlatform(x, currentY, width, isMoving);
+            // TODAS as plataformas se movem - determinar tipo de movimento
+            let platformType = 'horizontal'; // Padrão horizontal
+            let moveSpeed = 0;
+
+            const typeRoll = Math.random();
+            if (typeRoll < 0.6) { // 60% chance de horizontal
+                platformType = 'horizontal';
+                moveSpeed = chance(0.5) ? rand(20, 40) : -rand(20, 40);
+            } else if (typeRoll < 0.85) { // 25% chance de vertical
+                platformType = 'vertical';
+                moveSpeed = chance(0.5) ? rand(15, 30) : -rand(15, 30);
+            } else { // 15% chance de explosiva
+                platformType = 'explosive';
+            }
+
+            this.spawnPlatform(x, currentY, width, platformType, moveSpeed);
         }
 
         this.lastPlatformY = currentY;
-    }
-
-    /**
+    }    /**
      * Cria uma nova plataforma
      */
-    spawnPlatform(x, y, width, isMoving = false) {
+    spawnPlatform(x, y, width, platformType = 'normal', moveSpeed = 0) {
         const platform = this.platformPool.get();
-        platform.init(x, y, width, isMoving, isMoving ? rand(-60, 60) : 0);
+        platform.init(x, y, width, platformType, moveSpeed);
         this.platforms.push(platform);
 
-        // Chance de spawnar inimigo na plataforma
-        if (chance(this.difficultyParams.enemySpawnChance)) {
+        // Chance de spawnar inimigo na plataforma (reduzida para plataformas móveis e explosivas)
+        let enemyChance = this.difficultyParams.enemySpawnChance;
+        if (platformType === 'horizontal' || platformType === 'vertical') {
+            enemyChance *= 0.6;
+        } else if (platformType === 'explosive') {
+            enemyChance *= 0.3; // Muito baixa chance em plataformas explosivas
+        }
+
+        if (chance(enemyChance)) {
             this.spawnEnemy(x, y - 25, platform);
         }
 
@@ -223,9 +242,29 @@ export class Game {
                 this.difficultyParams.platformWidthMin,
                 this.difficultyParams.platformWidthMax
             );
-            const isMoving = chance(this.difficultyParams.movingPlatformChance);
 
-            this.spawnPlatform(x, this.lastPlatformY, width, isMoving);
+            // TODAS as plataformas se movem - determinar tipo de movimento
+            let platformType = 'horizontal'; // Padrão horizontal
+            let moveSpeed = 0;
+
+            const horizontalChance = 0.6; // 60% horizontais
+            const verticalChance = 0.25;  // 25% verticais
+            const explosiveChance = Math.min(0.15, 0.05 + this.tier * 0.01); // 15% explosivas, aumenta com dificuldade
+
+            const typeRoll = Math.random();
+            if (typeRoll < horizontalChance) {
+                platformType = 'horizontal';
+                moveSpeed = chance(0.5) ? rand(25, 45) : -rand(25, 45);
+            } else if (typeRoll < horizontalChance + verticalChance) {
+                platformType = 'vertical';
+                moveSpeed = chance(0.5) ? rand(20, 35) : -rand(20, 35);
+            } else if (typeRoll < horizontalChance + verticalChance + explosiveChance) {
+                platformType = 'explosive';
+            } else {
+                // Fallback para horizontal se não encaixar em nenhuma categoria
+                platformType = 'horizontal';
+                moveSpeed = chance(0.5) ? rand(25, 45) : -rand(25, 45);
+            } this.spawnPlatform(x, this.lastPlatformY, width, platformType, moveSpeed);
         }
 
         // Ajustar altura de geração baseada na câmera
@@ -277,8 +316,10 @@ export class Game {
 
     updatePlatforms(dt) {
         const worldBounds = { width: this.width, height: this.height };
+        const playerPos = { x: this.player.x, y: this.player.y };
+
         for (const platform of this.platforms) {
-            platform.update(dt, worldBounds);
+            platform.update(dt, worldBounds, playerPos);
         }
     }
 
@@ -309,6 +350,12 @@ export class Game {
                 this.player.y = platform.y - platform.h / 2 - this.player.h / 2;
                 this.player.onGround = true;
                 this.player.jump(this.difficultyParams.jumpVelocity);
+
+                // Marcar plataforma explosiva como pisada
+                if (platform.type === 'explosive') {
+                    platform.stepOn();
+                }
+
                 break; // Só uma plataforma por frame
             }
         }

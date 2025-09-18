@@ -182,43 +182,120 @@ export class Platform {
         this.y = 0;
         this.w = 80;
         this.h = CONSTANTS.PLATFORM_HEIGHT;
-        this.vx = 0; // velocidade horizontal (para plataformas móveis)
+        this.vx = 0; // velocidade horizontal
+        this.vy = 0; // velocidade vertical
         this.active = false;
         this.isMoving = false;
         this.color = '#60a5fa';
-        this.type = 'normal'; // normal, moving, fragile
+        this.type = 'normal'; // normal, horizontal, vertical, explosive
         this.moveRange = 100; // distância máxima de movimento
         this.originalX = 0; // posição inicial para plataformas móveis
+        this.originalY = 0; // posição inicial para plataformas verticais
+        this.pauseTimer = 0; // Timer para pausar movimento
+        this.explosionTimer = 0; // Timer para explosão
+        this.wasSteppedOn = false; // Se o player já pisou nesta plataforma
+        this.blinkTimer = 0; // Timer para piscar antes de explodir
     }
 
-    init(x, y, width, isMoving = false, moveSpeed = 0) {
+    init(x, y, width, platformType = 'normal', moveSpeed = 0) {
         this.x = x;
         this.y = y;
         this.originalX = x;
+        this.originalY = y;
         this.w = width;
-        this.isMoving = isMoving;
-        this.vx = isMoving ? moveSpeed : 0;
+        this.type = platformType;
         this.active = true;
+        this.pauseTimer = 0;
+        this.explosionTimer = 0;
+        this.wasSteppedOn = false;
+        this.blinkTimer = 0;
 
-        if (isMoving) {
-            this.type = 'moving';
-            this.color = '#fbbf24';
-        } else {
-            this.type = 'normal';
-            this.color = '#60a5fa';
+        // Configurar baseado no tipo
+        switch (platformType) {
+            case 'horizontal':
+                this.isMoving = true;
+                this.vx = moveSpeed;
+                this.vy = 0;
+                this.color = '#60a5fa'; // Azul
+                this.moveRange = 150;
+                break;
+            case 'vertical':
+                this.isMoving = true;
+                this.vx = 0;
+                this.vy = moveSpeed;
+                this.color = '#fbbf24'; // Amarelo
+                this.moveRange = 100;
+                break;
+            case 'explosive':
+                this.isMoving = false;
+                this.vx = 0;
+                this.vy = 0;
+                this.color = '#ef4444'; // Vermelho
+                this.moveRange = 0;
+                break;
+            default: // normal - não deveria mais acontecer, mas como fallback vira horizontal
+                this.isMoving = true;
+                this.vx = moveSpeed || (chance(0.5) ? 30 : -30);
+                this.vy = 0;
+                this.color = '#60a5fa'; // Azul
+                this.moveRange = 150;
+                break;
         }
     }
 
-    update(dt, worldBounds) {
+    update(dt, worldBounds, playerPos = null) {
         if (!this.active) return;
 
-        if (this.isMoving) {
-            this.x += this.vx * dt;
+        // Lógica de explosão para plataformas explosivas
+        if (this.type === 'explosive' && this.wasSteppedOn) {
+            this.explosionTimer += dt;
+            this.blinkTimer += dt;
 
-            // Inverter direção se sair do range
-            const distanceFromOriginal = Math.abs(this.x - this.originalX);
-            if (distanceFromOriginal > this.moveRange || this.x < 20 || this.x > worldBounds.width - 20) {
-                this.vx *= -1;
+            // Explodir após 3 segundos
+            if (this.explosionTimer >= 3.0) {
+                this.active = false;
+                return;
+            }
+        }
+
+        // Lógica de movimento para plataformas móveis
+        if (this.isMoving) {
+            // Verificar se o player está muito próximo para pausar o movimento (mais restritivo)
+            let shouldPause = false;
+            if (playerPos) {
+                const distanceToPlayer = Math.abs(this.x - playerPos.x);
+                const verticalDistance = Math.abs(this.y - playerPos.y);
+
+                // Pausar apenas se o player está MUITO próximo
+                if (distanceToPlayer < 60 && verticalDistance < 40 && this.type !== 'explosive') {
+                    shouldPause = true;
+                    this.pauseTimer = Math.min(this.pauseTimer + dt, 0.8); // Pausar menos tempo
+                } else {
+                    this.pauseTimer = Math.max(this.pauseTimer - dt * 3, 0); // Reduzir timer mais rapidamente
+                }
+            }
+
+            // Só mover se não estiver pausado
+            if (this.pauseTimer <= 0 && !shouldPause) {
+                if (this.type === 'horizontal') {
+                    // Movimento horizontal
+                    this.x += this.vx * dt;
+
+                    // Inverter direção se sair do range
+                    const distanceFromOriginal = Math.abs(this.x - this.originalX);
+                    if (distanceFromOriginal > this.moveRange || this.x < 20 || this.x > worldBounds.width - 20) {
+                        this.vx *= -1;
+                    }
+                } else if (this.type === 'vertical') {
+                    // Movimento vertical
+                    this.y += this.vy * dt;
+
+                    // Inverter direção se sair do range
+                    const distanceFromOriginal = Math.abs(this.y - this.originalY);
+                    if (distanceFromOriginal > this.moveRange) {
+                        this.vy *= -1;
+                    }
+                }
             }
         }
     }
@@ -232,17 +309,88 @@ export class Platform {
         };
     }
 
+    stepOn() {
+        if (this.type === 'explosive' && !this.wasSteppedOn) {
+            this.wasSteppedOn = true;
+            this.explosionTimer = 0;
+        }
+    }
+
     draw(ctx) {
         if (!this.active) return;
 
-        ctx.fillStyle = this.color;
+        // Lógica especial para plataformas explosivas
+        if (this.type === 'explosive' && this.wasSteppedOn) {
+            // Piscar mais rápido conforme se aproxima da explosão
+            const blinkSpeed = 2 + (this.explosionTimer / 3) * 8;
+            const shouldBlink = Math.floor(this.blinkTimer * blinkSpeed) % 2 === 0;
+
+            if (shouldBlink) {
+                ctx.fillStyle = '#fca5a5'; // Vermelho claro quando piscando
+            } else {
+                ctx.fillStyle = this.color; // Vermelho normal
+            }
+        } else {
+            ctx.fillStyle = this.color;
+        }
+
         ctx.fillRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
 
-        // Destacar plataformas móveis com borda
-        if (this.isMoving) {
-            ctx.strokeStyle = '#f59e0b';
+        // Destacar plataformas móveis com bordas específicas
+        if (this.type === 'horizontal') {
+            // Borda azul para movimento horizontal
+            ctx.strokeStyle = this.pauseTimer > 0 ? '#1d4ed8' : '#3b82f6';
+            ctx.lineWidth = this.pauseTimer > 0 ? 3 : 2;
+            ctx.strokeRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+
+            // Setas indicando direção horizontal
+            ctx.fillStyle = '#ffffff';
+            const arrowY = this.y;
+            ctx.fillRect(this.x - 8, arrowY - 2, 4, 4);
+            ctx.fillRect(this.x + 4, arrowY - 2, 4, 4);
+
+        } else if (this.type === 'vertical') {
+            // Borda amarela para movimento vertical
+            ctx.strokeStyle = this.pauseTimer > 0 ? '#f97316' : '#f59e0b';
+            ctx.lineWidth = this.pauseTimer > 0 ? 3 : 2;
+            ctx.strokeRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+
+            // Setas indicando direção vertical
+            ctx.fillStyle = '#ffffff';
+            const arrowX = this.x;
+            ctx.fillRect(arrowX - 2, this.y - 8, 4, 4);
+            ctx.fillRect(arrowX - 2, this.y + 4, 4, 4);
+
+        } else if (this.type === 'explosive') {
+            // Borda vermelha para plataformas explosivas
+            ctx.strokeStyle = '#dc2626';
             ctx.lineWidth = 2;
             ctx.strokeRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+
+            // Símbolo de perigo no centro
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('!', this.x, this.y + 4);
+
+            // Timer visual se ativada
+            if (this.wasSteppedOn) {
+                const timeLeft = 3 - this.explosionTimer;
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '10px Arial';
+                ctx.fillText(Math.ceil(timeLeft).toString(), this.x, this.y - 12);
+            }
+        }
+
+        // Pontos indicadores se pausada (para plataformas móveis)
+        if (this.isMoving && this.pauseTimer > 0) {
+            ctx.fillStyle = '#fef3c7';
+            const dotSize = 3;
+            const y = this.y - this.h / 2 - 8;
+            for (let i = 0; i < 3; i++) {
+                const x = this.x - 12 + i * 12;
+                ctx.fillRect(x - dotSize / 2, y - dotSize / 2, dotSize, dotSize);
+            }
         }
     }
 }
