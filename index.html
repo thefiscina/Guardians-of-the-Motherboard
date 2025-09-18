@@ -1,53 +1,61 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guardian of the Motherboard</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- PixiJS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.3/pixi.min.js" crossorigin="anonymous"></script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Subida Infinita</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14'>🎮</text></svg>">
 </head>
 
 <body>
-    <!-- Loading Screen -->
-    <div id="loading-screen">
-        <div class="loading-content">
-            <h1>GUARDIAN OF THE MOTHERBOARD</h1>
-            <div class="loading-bar">
-                <div class="loading-progress"></div>
+    <div id="game-root">
+        <canvas id="game"></canvas>
+
+        <div id="ui">
+            <div class="hud">
+                <div class="hud-left">
+                    <span id="score">Score: 0</span>
+                    <span id="tier">Tier: 0</span>
+                </div>
+                <div class="hud-right">
+                    <span id="best">Best: 0</span>
+                </div>
             </div>
-            <p>Carregando...</p>
+            <div class="controls">
+                <button id="btn-left" class="control-btn">◀</button>
+                <div class="center-controls">
+                    <button id="btn-pause" class="control-btn">⏸</button>
+                    <button id="btn-mute" class="control-btn">🔈</button>
+                </div>
+                <button id="btn-right" class="control-btn">▶</button>
+            </div>
+        </div>
+
+        <div id="overlay" class="hidden">
+            <div class="panel">
+                <h1 id="overlay-title">Game Over</h1>
+                <p id="final-score">Score: 0 | Best: 0</p>
+                <button id="btn-restart" class="action-btn">Try Again</button>
+                <button id="btn-start" class="action-btn hidden">Start Game</button>
+            </div>
+        </div>
+
+        <!-- Instruções iniciais -->
+        <div id="instructions" class="overlay-instructions">
+            <div class="instruction-text">
+                <h2>Subida Infinita</h2>
+                <p>Toque nas laterais da tela para mover</p>
+                <p>Pule automaticamente nas plataformas</p>
+                <p>Evite inimigos e projéteis</p>
+                <small>Desktop: use as setas ← → ou A/D</small>
+            </div>
         </div>
     </div>
 
-    <!-- Game Container -->
-    <div id="game-container">
-        <canvas id="game-canvas"></canvas>
-    </div>
-
-    <!-- Mobile Controls -->
-    <div id="mobile-controls" class="mobile-only">
-        <div class="dpad">
-            <button class="btn-up" data-key="w">↑</button>
-            <button class="btn-left" data-key="a">←</button>
-            <button class="btn-down" data-key="s">↓</button>
-            <button class="btn-right" data-key="d">→</button>
-        </div>
-        <div class="action-buttons">
-            <button class="btn-action" data-action="attack">MAGIA</button>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <script>
-        // Verificação básica de compatibilidade
-        if (!window.requestAnimationFrame) {
-            document.body.innerHTML = '<div style="text-align:center;padding:50px;font-family:monospace;">Seu navegador não é compatível com este jogo. Tente usar uma versão mais recente do Chrome, Firefox ou Safari.</div>';
-        }
-    </script>
-    <script type="module" src="src/main.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>
